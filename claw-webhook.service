@@ -1,0 +1,15 @@
+[Unit]
+Description=OpenClaw GitHub Webhook Receiver
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/claw-infra-kit
+ExecStart=/usr/bin/python3 webhook_server.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

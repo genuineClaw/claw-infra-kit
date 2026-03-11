@@ -1,0 +1,13 @@
+{
+  "webhook_secret": "CHANGE_ME_TO_SECURE_RANDOM_STRING",
+  "openclaw_endpoint": "http://localhost:3000",
+  "openclaw_session": "main",
+  "authorized_user": "pkuGenuine",
+  "assistant_account": "genuineClaw",
+  "watched_repos": [
+    "genuineClaw/lspyc",
+    "genuineClaw/CodeRetrX"
+  ],
+  "github_ips_only": true,
+  "port": 8080
+}
