@@ -1,0 +1,16 @@
+[project]
+name = "claw-infra-kit"
+version = "0.1.0"
+description = "Infrastructure tools for OpenClaw agent"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv]
+dev-dependencies = []
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+webhook = { workspace = true }

@@ -1,41 +1,61 @@
-# OpenClaw GitHub Webhook Infrastructure
+# Claw Infra Kit
 
-Webhook receiver that triggers OpenClaw agent when `@genuineClaw` is mentioned by `pkuGenuine`.
+Infrastructure tools for OpenClaw agent interaction. Multi-package monorepo managed by `uv`.
+
+## Packages
+
+| Package | Description |
+|---------|-------------|
+| [`packages/webhook`](packages/webhook/) | GitHub webhook receiver that spawns isolated agent sessions |
 
 ## Quick Start
 
-### 1. Configure
-
-Edit `config.json`:
-
-```json
-{
-  "webhook_secret": "YOUR_SECURE_RANDOM_SECRET",
-  "openclaw_endpoint": "http://localhost:3000",
-  "openclaw_session": "main",
-  "authorized_user": "pkuGenuine",
-  "assistant_account": "genuineClaw",
-  "watched_repos": ["genuineClaw/lspyc", "genuineClaw/CodeRetrX"],
-  "github_ips_only": true,
-  "port": 8080
-}
-```
-
-### 2. Install Dependencies
+### 1. Install uv
 
 ```bash
-pip install -r requirements.txt
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+### 2. Configure
+
+Edit `config.toml` at repo root:
+
+```toml
+[webhook]
+secret = "YOUR_SECURE_RANDOM_SECRET"
+port = 8080
+github_ips_only = true
+
+[openclaw]
+endpoint = "http://localhost:3000"
+agent_id = "coder"
+runtime = "subagent"
+mode = "run"
+
+[github]
+authorized_user = "pkuGenuine"
+assistant_account = "genuineClaw"
+watched_repos = [
+    "genuineClaw/lspyc",
+    "genuineClaw/CodeRetrX",
+]
 ```
 
 ### 3. Run
 
 ```bash
-python webhook_server.py
+# From repo root
+uv run --directory packages/webhook python -m webhook.server
+
+# Or directly
+uv run --directory packages/webhook webhook.server:main
 ```
 
 Server runs on `http://0.0.0.0:8080`
 
-### 4. Expose via ngrok (for testing)
+### 4. Expose via HTTPS
+
+For testing without a domain:
 
 ```bash
 ngrok http 8080
@@ -59,7 +79,7 @@ gh api repos/genuineClaw/lspyc/hooks \
 ```bash
 # Copy files to /opt
 sudo mkdir -p /opt/claw-infra-kit
-sudo cp webhook_server.py config.json requirements.txt /opt/claw-infra-kit/
+sudo cp -r . /opt/claw-infra-kit/
 
 # Install service
 sudo cp claw-webhook.service /etc/systemd/system/
@@ -83,31 +103,56 @@ journalctl -u claw-webhook -f
 | `/health` | GET | Health check |
 | `/` | GET | Service info |
 
-## Security Features
+## How It Works
+
+```
+GitHub Issue/PR Comment (@genuineClaw from pkuGenuine)
+                    │
+                    ▼
+         ┌──────────────────┐
+         │  Webhook Server  │ ← Verifies signature + IP + user
+         └────────┬─────────┘
+                  │
+                  ▼
+         ┌──────────────────┐
+         │  sessions_spawn  │ ← Spawns isolated "coder" agent
+         └────────┬─────────┘
+                  │
+                  ▼
+         ┌──────────────────┐
+         │  Agent Session   │ ← Handles issue, posts via gh CLI
+         └──────────────────┘
+```
+
+## Security
 
 - ✅ HMAC-SHA256 signature verification
-- ✅ IP allowlist (GitHub IP ranges only)
+- ✅ GitHub IP allowlist
 - ✅ Authorized user check (only `pkuGenuine`)
 - ✅ Mention verification (only `@genuineClaw`)
 - ✅ Repository allowlist
 
-## Flow
+## Development
+
+### Project Structure
 
 ```
-GitHub Issue/PR Comment
-        │
-        ▼
-┌──────────────────┐
-│ Webhook Receiver │ ← Verifies signature + IP + user
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│  Filter Check    │ ← @genuineClaw from pkuGenuine?
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│ Trigger OpenClaw │ ← POST /api/sessions/main/send
-└──────────────────┘
+claw-infra-kit/
+├── pyproject.toml          # Root workspace config
+├── config.toml             # Configuration
+├── packages/
+│   └── webhook/            # Webhook receiver package
+│       ├── pyproject.toml
+│       └── src/webhook/
+│           ├── __init__.py
+│           └── server.py
+└── README.md
+```
+
+### Adding a New Package
+
+```bash
+mkdir -p packages/new-package/src/new_package
+# Create pyproject.toml and source files
+# Add to [tool.uv.workspace] members in root pyproject.toml
 ```

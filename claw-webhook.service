@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=/opt/claw-infra-kit
-ExecStart=/usr/bin/python3 webhook_server.py
+ExecStart=/usr/bin/uv run --directory packages/webhook webhook.server:main
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
