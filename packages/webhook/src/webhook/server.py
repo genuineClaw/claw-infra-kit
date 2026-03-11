@@ -6,20 +6,14 @@ Receives GitHub webhooks, filters for @genuineClaw mentions from authorized user
 and spawns isolated OpenClaw sessions to handle each issue/PR.
 """
 
-import sys
 import json
 import hmac
 import hashlib
 import ipaddress
 import re
+import tomllib
 from pathlib import Path
-from typing import Optional
 from datetime import datetime
-
-try:
-    import tomllib
-except ImportError:
-    import tomli as tomllib
 
 import httpx
 from fastapi import FastAPI, Request, HTTPException
@@ -64,7 +58,7 @@ def verify_github_ip(client_ip: str) -> bool:
     """Check if request comes from GitHub's IP range."""
     if not config.get("webhook", {}).get("github_ips_only", True):
         return True
-    
+
     try:
         client_addr = ipaddress.ip_address(client_ip)
         for cidr in GITHUB_IP_RANGES:
@@ -72,7 +66,7 @@ def verify_github_ip(client_ip: str) -> bool:
                 return True
     except ValueError:
         pass
-    
+
     return False
 
 
@@ -80,15 +74,15 @@ def verify_signature(payload: bytes, signature: str, secret: str) -> bool:
     """Verify GitHub webhook signature using HMAC-SHA256."""
     if not signature or not signature.startswith("sha256="):
         return False
-    
+
     expected = signature[7:]  # Remove "sha256=" prefix
-    
+
     computed = hmac.new(
         secret.encode(),
         payload,
         hashlib.sha256
     ).hexdigest()
-    
+
     return hmac.compare_digest(computed, expected)
 
 
@@ -99,7 +93,7 @@ def extract_mentions(text: str) -> list[str]:
     return re.findall(r'@([a-zA-Z0-9-]+)', text)
 
 
-def should_trigger(payload: dict, event_type: str) -> tuple[bool, Optional[str]]:
+def should_trigger(payload: dict, event_type: str) -> tuple[bool, str | dict]:
     """
     Determine if this webhook should trigger the agent.
     Returns (should_trigger, info_dict_or_reason_string).
@@ -108,28 +102,28 @@ def should_trigger(payload: dict, event_type: str) -> tuple[bool, Optional[str]]
     authorized_user = github_config.get("authorized_user", "pkuGenuine")
     assistant_account = github_config.get("assistant_account", "genuineClaw")
     watched_repos = github_config.get("watched_repos", [])
-    
+
     # Check action is "created" or "opened" (not edit/delete)
     action = payload.get("action", "")
     if action not in ("created", "opened"):
         return False, f"Action '{action}' ignored (only 'created'/'opened' trigger)"
-    
+
     # Check repository is in watched list
     repo_full_name = payload.get("repository", {}).get("full_name", "")
     if repo_full_name not in watched_repos:
         return False, f"Repo '{repo_full_name}' not in watched repos"
-    
+
     # Check sender is authorized
     sender = payload.get("sender", {}).get("login", "")
     if sender != authorized_user:
         return False, f"Sender '{sender}' not authorized (expected '{authorized_user}')"
-    
+
     # Check for @mention based on event type
     issue_url = None
     issue_title = None
     issue_number = None
     mention_text = None
-    
+
     if event_type == "issues":
         # New issue created
         issue_body = payload.get("issue", {}).get("body", "")
@@ -138,7 +132,7 @@ def should_trigger(payload: dict, event_type: str) -> tuple[bool, Optional[str]]
             issue_url = payload.get("issue", {}).get("html_url", "")
             issue_title = payload.get("issue", {}).get("title", "")
             issue_number = payload.get("issue", {}).get("number")
-    
+
     elif event_type == "issue_comment":
         # New comment on issue/PR
         comment_body = payload.get("comment", {}).get("body", "")
@@ -147,7 +141,7 @@ def should_trigger(payload: dict, event_type: str) -> tuple[bool, Optional[str]]
             issue_url = payload.get("issue", {}).get("html_url", "")
             issue_title = payload.get("issue", {}).get("title", "")
             issue_number = payload.get("issue", {}).get("number")
-    
+
     elif event_type == "pull_request":
         # New PR opened
         pr_body = payload.get("pull_request", {}).get("body", "")
@@ -156,10 +150,10 @@ def should_trigger(payload: dict, event_type: str) -> tuple[bool, Optional[str]]
             issue_url = payload.get("pull_request", {}).get("html_url", "")
             issue_title = payload.get("pull_request", {}).get("title", "")
             issue_number = payload.get("pull_request", {}).get("number")
-    
+
     if not mention_text:
         return False, f"No @{assistant_account} mention found"
-    
+
     return True, {
         "url": issue_url,
         "title": issue_title,
@@ -178,7 +172,7 @@ async def spawn_agent_session(trigger_info: dict) -> bool:
     agent_id = openclaw_config.get("agent_id", "coder")
     runtime = openclaw_config.get("runtime", "subagent")
     mode = openclaw_config.get("mode", "run")
-    
+
     # Build task prompt
     task = f"""You have been summoned via GitHub mention.
 
@@ -195,17 +189,17 @@ Please:
 
 Use the `gh` CLI which is already authenticated as `genuineClaw`.
 """
-    
+
     # Call sessions_spawn API
     url = f"{endpoint}/api/sessions/spawn"
-    
+
     payload = {
         "task": task,
         "agentId": agent_id,
         "runtime": runtime,
         "mode": mode,
     }
-    
+
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -228,41 +222,41 @@ Use the `gh` CLI which is already authenticated as `genuineClaw`.
 @app.post("/webhook")
 async def handle_webhook(request: Request):
     """Handle incoming GitHub webhook."""
-    
+
     # Get client IP
     client_ip = request.client.host if request.client else "unknown"
-    
+
     # Verify IP comes from GitHub
     if not verify_github_ip(client_ip):
         logger.warning(f"Rejected request from non-GitHub IP: {client_ip}")
         raise HTTPException(status_code=403, detail="IP not allowed")
-    
+
     # Get headers
     signature = request.headers.get("x-hub-signature-256", "")
     event_type = request.headers.get("x-github-event", "")
     delivery_id = request.headers.get("x-github-delivery", "")
-    
+
     # Get raw body for signature verification
     payload_bytes = await request.body()
-    
+
     # Verify signature
     secret = config.get("webhook", {}).get("secret", "")
     if not verify_signature(payload_bytes, signature, secret):
         logger.warning(f"Invalid signature for delivery {delivery_id}")
         raise HTTPException(status_code=401, detail="Invalid signature")
-    
+
     # Parse payload
     try:
         payload = json.loads(payload_bytes)
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON")
-    
+
     # Log the event
     logger.info(f"Received {event_type} event, delivery: {delivery_id}")
-    
+
     # Check if we should trigger
     should, result = should_trigger(payload, event_type)
-    
+
     if should:
         logger.info(f"Triggering agent spawn for: {result}")
         success = await spawn_agent_session(result)
@@ -302,3 +296,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

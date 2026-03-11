@@ -156,3 +156,4 @@ mkdir -p packages/new-package/src/new_package
 # Create pyproject.toml and source files
 # Add to [tool.uv.workspace] members in root pyproject.toml
 ```
+
