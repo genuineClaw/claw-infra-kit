@@ -27,9 +27,11 @@ from fastapi.logger import logger
 import uvicorn
 
 # Find config file (check multiple locations)
+# Path from server.py: .../packages/webhook/src/webhook/server.py
+# Need 5 parents to get to repo root
 CONFIG_PATHS = [
-    Path(__file__).parent.parent.parent.parent / "config.toml",  # repo root
-    Path(__file__).parent.parent / "config.toml",  # package root
+    Path(__file__).parent.parent.parent.parent.parent / "config.toml",  # repo root
+    Path(__file__).parent.parent.parent.parent / "config.toml",  # packages/
     Path("/etc/claw-infra-kit/config.toml"),  # system config
 ]
 
