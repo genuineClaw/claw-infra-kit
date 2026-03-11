@@ -2,21 +2,17 @@
 
 [webhook]
 # Secret for GitHub webhook signature verification
-secret = "CHANGE_ME_TO_SECURE_RANDOM_STRING"
+secret = "just-a-simple-secret"
 # Port to listen on
 port = 8080
 # Only accept requests from GitHub IP ranges
-github_ips_only = true
+github_ips_only = false
+# Debug mode - enable verbose logging
+debug = true
 
 [openclaw]
-# OpenClaw gateway endpoint
-endpoint = "http://localhost:3000"
 # Agent to spawn for handling issues
 agent_id = "coder"
-# Session runtime
-runtime = "subagent"
-# Mode: "run" for one-shot tasks
-mode = "run"
 
 [github]
 # Authorized user who can trigger the agent
